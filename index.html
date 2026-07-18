@@ -52,11 +52,22 @@ body.typing{cursor:none}
 
 /* ---------- machine chrome ---------- */
 #platen{
-  position:absolute; left:0; width:100%;
+  position:absolute; left:0; border-radius:10px;
   background:linear-gradient(180deg,#3a352f 0%,#171411 28%,#0c0a09 55%,#242019 90%,#151210 100%);
-  box-shadow:0 -2px 8px rgba(0,0,0,.6);
-  z-index:5;
+  box-shadow:0 -2px 8px rgba(0,0,0,.6), 0 3px 8px rgba(0,0,0,.45);
+  z-index:5; will-change:transform;
+  transition:transform 60ms linear;
 }
+#platen.cr{transition:transform 380ms cubic-bezier(.2,.9,.25,1)}
+#platen.feed{transition:transform 550ms cubic-bezier(.2,.8,.3,1)}
+#platen::before,#platen::after{ /* carriage knobs */
+  content:""; position:absolute; top:-4px; width:38px; height:38px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #47423c 0%, #211d19 55%, #120f0d 100%);
+  box-shadow:0 2px 6px rgba(0,0,0,.65), inset 0 1px 2px rgba(255,255,255,.14),
+             inset 0 0 0 4px rgba(0,0,0,.35);
+}
+#platen::before{left:-19px}
+#platen::after{right:-19px}
 #machineBody{
   position:absolute; left:0; width:100%; bottom:0;
   background:linear-gradient(180deg,#221e1a 0%,#191512 40%,#100d0b 100%);
@@ -339,6 +350,7 @@ function updateChrome(){
   const platenTop = sp.y + S.fontSize*0.42;
   platen.style.top = platenTop+"px";
   platen.style.height = "30px";
+  platen.style.width = (paperW + 120)+"px";   // carriage-mounted: rides with the paper
   body.style.top = (platenTop+30)+"px";
   ribbon.style.left = (sp.x-28)+"px";
   ribbon.style.top  = (platenTop-6)+"px";
@@ -400,6 +412,12 @@ function positionCarriage(mode){
   carriage.classList.remove("cr","feed");
   if(mode) carriage.classList.add(mode);
   carriage.style.transform = `translate(${x}px, ${y}px)`;
+  /* the platen is part of the carriage — it slides with the paper
+     (X only; the paper rolls up through it on a line feed) */
+  const pl = document.getElementById("platen");
+  pl.classList.remove("cr","feed");
+  if(mode) pl.classList.add(mode);
+  pl.style.transform = `translateX(${x - 60}px)`;
   posEl.textContent = `LINE ${row+1}   ·   COL ${col+1} / ${S.cols}`;
 }
 
