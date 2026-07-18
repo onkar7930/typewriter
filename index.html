@@ -419,8 +419,9 @@ function keyNorm(ch){
 }
 
 /* ---------------- typebar animation ----------------
-   The key's own spoke lifts out of the fan and swings about its
-   pivot on the outer arc up to the strike point, then drops back. */
+   The key's own spoke lifts out of the fan and flips up around its
+   pivot at the segment (by the type guide) to strike the paper,
+   then drops back into its slot. */
 function spawnArm(ch){
   if(!S.armsOn || !fanState.spokes.length) return;
   if(armsEl.childElementCount > 7) armsEl.firstElementChild.remove();
@@ -431,9 +432,9 @@ function spawnArm(ch){
   const t = Math.max(-1.32, Math.min(1.32, keyNorm(ch)*1.32*frac));
   const idx = Math.max(0, Math.min(N-1, Math.round((t+1.32)/2.64*(N-1))));
   const sk = fanState.spokes[idx];
-  /* pivot & resting tip in screen coords */
-  const PX = fanState.left + sk.px, PY = fanState.top + sk.py;
-  const TX = fanState.left + sk.tx, TY = fanState.top + sk.ty;
+  /* pivot at the segment (back, by the type guide); slug rests out on the arc */
+  const PX = fanState.left + sk.tx, PY = fanState.top + sk.ty;
+  const TX = fanState.left + sk.px, TY = fanState.top + sk.py;
   const L0 = Math.hypot(TX-PX, TY-PY);
   const aRest = Math.atan2(TX-PX, -(TY-PY))*180/Math.PI;
   const dxs = sp.x-PX, dys = sp.y-PY;
