@@ -354,20 +354,24 @@ function updateChrome(){
   shell.style.top  = shellTop+"px";
   shell.style.left = (sp.x - shellW/2)+"px";
   shell.style.width= shellW+"px";
-  buildFan(shellW);
+  buildFan(shellW, sp, shellTop);
   /* typebars emerge from the well, hidden below it */
   armsEl.style.clipPath = `inset(0 0 ${Math.max(0, innerHeight-(shellTop+150))}px 0)`;
 }
 
-/* static fan of resting typebars in the basket */
-function buildFan(shellW){
+/* the fan of resting typebars — each spoke is a real typebar that can fly */
+const fanState = { spokes:[], els:[], baseOp:[], left:0, top:0, N:46 };
+function buildFan(shellW, sp, shellTop){
   const svgNS = "http://www.w3.org/2000/svg";
   const svg = document.getElementById("fan");
   const W = Math.min(shellW*0.88, 780), H = 150;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.setAttribute("preserveAspectRatio", "none");
   svg.innerHTML = "";
-  const cx = W/2, cy = 12, N = 46;
+  fanState.spokes = []; fanState.els = []; fanState.baseOp = [];
+  fanState.left = sp.x - W/2;          // well is centered on the strike point
+  fanState.top  = shellTop + 8;
+  const cx = W/2, cy = 12, N = fanState.N;
   for(let i=0;i<N;i++){
     const t = -1.32 + 2.64*i/(N-1);
     const ex = cx + (W/2-6)*Math.sin(t);
@@ -377,8 +381,12 @@ function buildFan(shellW){
     ln.setAttribute("x2",ex); ln.setAttribute("y2",ey);
     ln.setAttribute("stroke","#8f887b");
     ln.setAttribute("stroke-width","1.8");
-    ln.setAttribute("opacity",(0.4+0.4*Math.abs(Math.sin(t))).toFixed(2));
+    const op = (0.4+0.4*Math.abs(Math.sin(t))).toFixed(2);
+    ln.setAttribute("opacity", op);
     svg.appendChild(ln);
+    fanState.spokes.push({tx:cx, ty:cy, px:ex, py:ey});  // tip rests at guide, pivot on outer arc
+    fanState.els.push(ln);
+    fanState.baseOp.push(op);
   }
 }
 function positionCarriage(mode){
@@ -410,30 +418,51 @@ function keyNorm(ch){
   return Math.max(-1, Math.min(1, (x-6.5)/6.5));
 }
 
-/* ---------------- typebar animation ---------------- */
+/* ---------------- typebar animation ----------------
+   The key's own spoke lifts out of the fan and swings about its
+   pivot on the outer arc up to the strike point, then drops back. */
 function spawnArm(ch){
-  if(!S.armsOn) return;
+  if(!S.armsOn || !fanState.spokes.length) return;
   if(armsEl.childElementCount > 7) armsEl.firstElementChild.remove();
   const sp = strike();
-  const x0 = sp.x + keyNorm(ch)*S.armSpread;
-  const y0 = sp.y + S.armDepth;
-  const dx = sp.x-x0, dy = sp.y-y0;
-  const len = Math.hypot(dx,dy);
-  const ang = Math.atan2(dx,-dy)*180/Math.PI;
+  const N = fanState.N;
+  /* pick this key's spoke by QWERTY position */
+  const frac = Math.max(0.2, Math.min(1, S.armSpread/300));
+  const t = Math.max(-1.32, Math.min(1.32, keyNorm(ch)*1.32*frac));
+  const idx = Math.max(0, Math.min(N-1, Math.round((t+1.32)/2.64*(N-1))));
+  const sk = fanState.spokes[idx];
+  /* pivot & resting tip in screen coords */
+  const PX = fanState.left + sk.px, PY = fanState.top + sk.py;
+  const TX = fanState.left + sk.tx, TY = fanState.top + sk.ty;
+  const L0 = Math.hypot(TX-PX, TY-PY);
+  const aRest = Math.atan2(TX-PX, -(TY-PY))*180/Math.PI;
+  const dxs = sp.x-PX, dys = sp.y-PY;
+  const L1 = Math.hypot(dxs, dys);
+  const aStrike = Math.atan2(dxs, -dys)*180/Math.PI;
+  const k = L1/L0;                       // slight reach as the bar flies up
   const el = document.createElement("div");
   el.className = "arm";
-  el.style.left = (x0-2.5)+"px";
-  el.style.top  = (y0-len)+"px";
-  el.style.height = len+"px";
+  el.style.left = (PX-2.5)+"px";
+  el.style.top  = (PY-L0)+"px";
+  el.style.height = L0+"px";
   el.style.transformOrigin = "50% 100%";
+  el.style.transform = `rotate(${aRest}deg)`;
   armsEl.appendChild(el);
-  const up = S.strikeMs, down = S.strikeMs*1.6;
+  const up = S.strikeMs, down = S.strikeMs*1.7, total = up+down;
   el.animate([
-    { transform:`rotate(${ang}deg) scaleY(0.12)`, offset:0 },
-    { transform:`rotate(${ang}deg) scaleY(1)`,    offset:up/(up+down) },
-    { transform:`rotate(${ang}deg) scaleY(0.12)`, offset:1 }
-  ], { duration:up+down, easing:"linear" });
-  setTimeout(()=>el.remove(), up+down+30);
+    { transform:`rotate(${aRest}deg) scaleY(1)`, filter:"blur(0px)", offset:0,
+      easing:"cubic-bezier(.55,0,1,.45)" },
+    { transform:`rotate(${(aRest+aStrike)/2}deg) scaleY(${(1+k)/2})`, filter:"blur(1.2px)",
+      offset:(up*0.55)/total, easing:"cubic-bezier(0,.5,.5,1)" },
+    { transform:`rotate(${aStrike}deg) scaleY(${k})`, filter:"blur(0px)", offset:up/total,
+      easing:"cubic-bezier(.5,0,.7,.5)" },
+    { transform:`rotate(${aRest}deg) scaleY(1)`, filter:"blur(0px)", offset:1 }
+  ], { duration: total });
+  /* lift the resting spoke out of the fan while its bar is flying */
+  const fel = fanState.els[idx];
+  fel.setAttribute("opacity","0");
+  setTimeout(()=>fel.setAttribute("opacity", fanState.baseOp[idx]), total+15);
+  setTimeout(()=>el.remove(), total+30);
 }
 
 /* ---------------- ink rendering ---------------- */
